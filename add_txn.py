@@ -22,7 +22,7 @@ def insert_new_coin(symbol, cursor):
 
     try:
         # noinspection SyntaxError
-        cursor.execute("INSERT INTO coins (coin_name, coin_symbol) VALUES (%S, %S)", (name, symbol))
+        cursor.execute("INSERT INTO coins (coin_name, coin_symbol) VALUES (%s, %s)", (name, symbol))
     except psycopg2.Error as e:
         print(e.pgerror)
         return -1
@@ -52,7 +52,7 @@ def insert_new_wallet(wallet_name, cursor):
     try:
         # noinspection SyntaxError,SyntaxError
         cursor.execute("""
-        INSERT INTO wallets (wallet_name, wallet_description) VALUES (%S, %S)
+        INSERT INTO wallets (wallet_name, wallet_description) VALUES (%s, %s)
         """, (wallet_name, wallet_desc))
     except psycopg2.Error as e:
         print(e.pgerror)
@@ -68,7 +68,7 @@ def insert_new_wallet(wallet_name, cursor):
 
 
 def get_coin_id(symbol, cursor):
-    """ Retreives coin_id for previously-seen currencies
+    """ Retrieves coin_id for previously-seen currencies
 
     :param symbol: 3/4 letter code identifying coin
     :type symbol: string
@@ -77,6 +77,7 @@ def get_coin_id(symbol, cursor):
     :return: coin_id for the given currency
     :rtype: int
     """
+    # noinspection SyntaxError
     cursor.execute("SELECT coin_id FROM coins WHERE coin_symbol = %s",
                    (symbol,))
     res = cursor.fetchone()
@@ -97,6 +98,7 @@ def get_wallet_id(wallet_name, cursor):
     :return: existing wallet_id
     :rtype: int
     """
+    # noinspection SyntaxError
     cursor.execute("SELECT wallet_id FROM wallets WHERE wallet_name = %s",
                    (wallet_name,))
     res = cursor.fetchone()
@@ -107,7 +109,7 @@ def get_wallet_id(wallet_name, cursor):
 
 
 def get_txn_data():
-    """ Prompts user to imput txn data via keyboard entries
+    """ Prompts user to input txn data via keyboard entries
 
     :return: dictionary of inputted dated
     :rtype: dictionary
@@ -188,14 +190,14 @@ def input_txn(txn, cursor):
         cursor.execute("""
               INSERT INTO transactions 
               (coin_id, wallet_id, num_shares, txn_time)
-              VALUES (%S, %S, %S, %S)
+              VALUES (%s, %s, %s, %s)
               """, (coin_id, wallet_id, txn["shares"], txn["time"]))
     else:
         # noinspection SyntaxError,SyntaxError,SyntaxError,SyntaxError,SyntaxError
         cursor.execute("""
               INSERT INTO transactions 
               (coin_id, wallet_id, num_shares, share_price, txn_time)
-              VALUES (%S, %S, %S, %S, %S)
+              VALUES (%s, %s, %s, %s, %s)
               """, (coin_id, wallet_id, txn["shares"], txn["price"], txn["time"]))
 
 
