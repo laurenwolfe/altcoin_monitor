@@ -1,6 +1,8 @@
 import psycopg2
 import requests
 from decimal import *
+from types import *
+from operator import itemgetter
 
 API_BASE = "https://api.coinmarketcap.com/v1/ticker/"
 
@@ -26,24 +28,25 @@ def print_header():
 
 def print_portfolio_data(sorted_assets):
     for data in sorted_assets:
-        # This separation allowed the figures to right justify while still appending a dollar sign to the front.
-        num_coins = str("{:,.4f}").format(data["num_coins"])
-        avg_cost = '$ ' + str("{:,.2f}").format(data["avg_cost"])
-        coin_value = '$ ' + str("{:,.2f}").format(data["coin_value"])
-        diff_in_price = '$ ' + str("{:,.2f}").format(data["delta_price"])
-        total_cost = '$ ' + str("{:,.2f}").format(data["total_cost"])
-        total_value = '$ ' + str("{:,.2f}").format(data["total_value"])
+        if data["num_shares"] > 0 and data["coin_value"] > 0:
+            # This separation allowed the figures to right justify while still appending a dollar sign to the front.
+            num_coins = str("{:,.4f}").format(data["num_shares"])
+            avg_cost = '$ ' + str("{:,.2f}").format(data["avg_cost"])
+            coin_value = '$ ' + str("{:,.2f}").format(data["coin_value"])
+            diff_in_price = '$ ' + str("{:,.2f}").format(data["delta_price"])
+            total_cost = '$ ' + str("{:,.2f}").format(data["total_cost"])
+            total_value = '$ ' + str("{:,.2f}").format(data["total_value"])
 
-        print('-' * 165)
-        print(" {:<8} {:>16} {:>20} {:>20} {:>17.2%} {:>19} {:>21} {:>23}".format(
-            data["symbol"],
-            coin_value,
-            total_value,
-            diff_in_price,
-            data["percent_of_cost"],
-            num_coins,
-            total_cost,
-            avg_cost))
+            print('-' * 165)
+            print(" {:<8} {:>16} {:>20} {:>20} {:>17.2%} {:>19} {:>21} {:>23}".format(
+                data["symbol"],
+                coin_value,
+                total_value,
+                diff_in_price,
+                data["percent_of_cost"],
+                num_coins,
+                total_cost,
+                avg_cost))
 
 
 def print_total_gains(holdings):
@@ -77,54 +80,69 @@ def merge_and_average_txn_data(cursor):
 
     for i in range(0, len(txns)):
         coin_id = txns[i][0]
-        if coin_id not in sums:
+
+        if coin_id not in sums and txns[i][3] > 0:
             sums[coin_id] = txns[i][3]
             coins[coin_id] = {}
             coins[coin_id]['coin_id'] = txns[i][0]
             coins[coin_id]['symbol'] = txns[i][1]
             coins[coin_id]['coin_name'] = txns[i][2]
-            coins[coin_id]['avg_cost'] = 0
-            coins[coin_id]['num_coins'] = txns[i][3]
+            coins[coin_id]['avg_cost'] = txns[i][4]
+            coins[coin_id]['total_cost'] = txns[i][3] * txns[i][4]
+            coins[coin_id]['num_shares'] = txns[i][3]
+            coins[coin_id]['coin_value'] = 0.0
+            coins[coin_id]['delta_price'] = 0
+            coins[coin_id]['total_value'] = 0
+            coins[coin_id]['percent_of_cost'] = 0
         else:
             sums[coin_id] += txns[i][3]
-            coins[coin_id]['num_coins'] += txns[i][3]
+            coins[coin_id]['num_shares'] += txns[i][3]
+            coins[coin_id]['total_cost'] += txns[i][3] * txns[i][4]
+    
 
-    for i in range(0, len(txns)):
-        coin_id = txns[i][0]
-        coins[coin_id]['avg_cost'] += (Decimal(txns[i][3]) / Decimal(sums[coin_id])) * Decimal(txns[i][4])
-
-    for id in coins.keys():
-        coins[id]['total_cost'] = coins[id]['avg_cost'] * coins[id]['num_coins']
-
+    # Calculate average cost per coin held
+    for i in coins.keys():
+        if coins[i]['num_shares'] > 0:
+            coins[i]['avg_cost'] = (Decimal(coins[i]['total_cost']) / Decimal(coins[i]['num_shares']))
     return coins
 
 
+def poll_api(url):
+    coin_req = requests.get(url)
+    return coin_req.json()
+
+
 def query_market_data(coins):
-    for id in coins.keys():
+    for cid in coins.keys():
+        url = API_BASE + coins[cid]["coin_name"]
+        coin_res = poll_api(url)
 
-        url = API_BASE + coins[id]['coin_name']
-        coin_req = requests.get(url)
-        # also contains % change over 1h, 24h, 7d, market cap, volume over 24 hours, rank
-        coin_res = coin_req.json()
+        if isinstance(coin_res, list):
+            #  also contains % change over 1h, 24h, 7d, market cap, volume over 24 hours, rank
+            price = Decimal(coin_res[0]['price_usd']).quantize(Decimal('.01'), rounding=ROUND_UP)
+            if coins[cid]['num_shares'] > 0:
+                coins[cid]['coin_value'] = price
+                coins[cid]['total_value'] = price * Decimal(coins[cid]["num_shares"])\
+                    .quantize(Decimal('.01'), rounding=ROUND_UP)
 
-        coins[id]["coin_value"] = Decimal(coin_res[0]['price_usd']).quantize(Decimal('.01'), rounding=ROUND_UP)
-        coins[id]["delta_price"] = (coins[id]["coin_value"] - coins[id]["avg_cost"]).quantize(Decimal('.01'), rounding=ROUND_UP)
-        coins[id]["total_value"] = (coins[id]["coin_value"] * coins[id]["num_coins"]).quantize(Decimal('.01'), rounding=ROUND_UP)
-        coins[id]["percent_of_cost"] = (coins[id]["total_value"] - coins[id]["total_cost"]) / coins[id]["total_cost"]
+                coins[cid]['delta_price'] = (coins[cid]["total_value"] - coins[cid]["total_cost"])\
+                    .quantize(Decimal('.01'), rounding=ROUND_UP)
 
+                coins[cid]["percent_of_cost"] = \
+                    (coins[cid]["total_value"] - coins[cid]["total_cost"]) / coins[cid]["total_cost"]
     return coins
 
 
 def main():
     cursor = query_portfolio('altcoin_assets')
     coins = merge_and_average_txn_data(cursor)
+
     coins = query_market_data(coins)
-
-    holdings = coins.values()
-
+    holdings = list(coins.values())
+    print(holdings)
+    holdings_sorted = sorted(holdings, key=itemgetter('total_value'), reverse=True)
     print_header()
-    print_portfolio_data(holdings)
-
+    print_portfolio_data(holdings_sorted)
     print_total_gains(holdings)
 
 
