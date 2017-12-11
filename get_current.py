@@ -80,11 +80,10 @@ def query_market_data(coins):
             coins[cid]['coin_value'] = price
             coins[cid]['total_value'] = price * Decimal(coins[cid]["num_shares"])\
                 .quantize(Decimal('.01'), rounding=ROUND_UP)
-
-            buy_sum = Decimal(coins[cid]['sum_cost']).quantize(Decimal('.01'), rounding=ROUND_UP)
+            purchase_cost = Decimal(coins[cid]['sum_cost']).quantize(Decimal('.01'), rounding=ROUND_UP)
             total_value = Decimal(coins[cid]['total_value']).quantize(Decimal('.01'), rounding=ROUND_UP)
-            coins[cid]['percent_of_cost'] = buy_sum / total_value
-            profits = total_value - buy_sum
+            coins[cid]['percent_of_cost'] = purchase_cost / total_value
+            profits = total_value - purchase_cost
             coins[cid]['fiat_profit'] = profits
 
     return coins
@@ -93,13 +92,13 @@ def query_market_data(coins):
 def print_header():
     print()
     print('Symbol'.ljust(8),
-          '| Coin Value'.ljust(19),
-          '| Total Worth'.ljust(20),
-          '| Fiat Gain/Loss'.ljust(20),
-          '| % Gain/Loss'.ljust(17),
-          '| # Coins Owned'.ljust(19),
-          '| Amount Invested'.ljust(21),
-          '| Avg Cost Per Coin'.ljust(21))
+          '| Exchange Rate '.ljust(19),
+          '| Averaged Coin Price'.ljust(21),
+          '| P/L Percentage'.ljust(17),
+          '| Current Total Value'.ljust(20),
+          '| Profit/Loss'.ljust(20),
+          '| Number of Coins Owned'.ljust(19),
+          '| Total Investment'.ljust(21))
 
 
 def print_portfolio_data(sorted_assets):
@@ -114,31 +113,32 @@ def print_portfolio_data(sorted_assets):
             fiat_profit = '$ ' + str("{:,.2f}").format(data["fiat_profit"])
 
             print('-' * 165)
-            print(" {:<8} {:>16} {:>20} {:>20} {:>17.2%} {:>19} {:>21} {:>23}".format(
+            print(" {:<11} {:>16} {:>20} {:>17.2%} {:>20} {:>19} {:>21} {:>23}".format(
                 data["symbol"],
                 coin_value,
+                avg_cost,
+                data["percent_of_cost"],
                 total_value,
                 fiat_profit,
-                data["percent_of_cost"],
                 num_coins,
-                sum_cost,
-                avg_cost))
+                sum_cost))
 
 
 def print_total_gains(holdings):
     total_invested = Decimal(0.0)
-    total_gains = Decimal(0.0)
+    total_value = Decimal(0.0)
+    total_profit = Decimal(0.0)
 
     for coin in holdings:
-        total_invested += coin["total_cost"]
-        total_gains += coin["total_value"]
+        if coin['num_shares'] > 0:
+            total_invested += Decimal(coin["total_cost"]).quantize(Decimal('.01'), rounding=ROUND_UP)
+            total_value += Decimal(coin["total_value"]).quantize(Decimal('.01'), rounding=ROUND_UP)
 
-    total_worth = total_gains - total_invested
-
+            total_profit += total_value - total_invested
     stars = '*' * 110
     print("\n\n" + stars + "\n")
-    print(" \t\t Total Gain/Loss: ${:,.2f} \t***  Total Value: ${:,.2f} \t***  Total Invested: ${:,.2f}"
-          .format(total_gains, total_worth, total_invested))
+    print(" \t\t Total Value: ${:,.2f} \t*** Total Gain/Loss: ${:,.2f} \t***  Total Invested: ${:,.2f}"
+          .format(total_value, total_profit, total_invested))
     print("\n" + stars)
 
 
